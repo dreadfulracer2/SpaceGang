@@ -2,23 +2,24 @@
 #pragma once
 
 #include <SFML/Network.hpp>
-#include <list>
+
 #include <cstdint>
+#include <list>
 
 #include "network/ClientSession.h"
+#include "lobby/LobbyManager.h"
 
 class GameServer
 {
 private:
     static constexpr unsigned short PORT = 53000;
-    static constexpr std::size_t MAX_PLAYERS = 4;
 
     sf::TcpListener listener;
     sf::SocketSelector selector;
 
     std::list<ClientSession> clients;
+    LobbyManager lobby;
 
-    std::uint32_t nextPlayerId = 1;
     bool running = false;
 
 public:
@@ -29,5 +30,29 @@ public:
 private:
     void acceptClient();
     void checkClients();
-    void broadcastPlayerJoined(std::uint32_t playerId);
+
+    void disconnectClient(
+        std::list<ClientSession>::iterator& it
+    );
+
+    void sendLobbyState(ClientSession& client);
+
+    void broadcastPlayerJoined(
+        std::uint32_t playerId
+    );
+
+    void broadcastPlayerLeft(
+        std::uint32_t playerId
+    );
+
+    void processMessage(
+        ClientSession& client,
+        const Protocol::Message& message
+    );
+
+    void broadcastZoneChanged(
+        std::uint32_t playerId,
+        std::uint8_t zoneId
+    );
+
 };

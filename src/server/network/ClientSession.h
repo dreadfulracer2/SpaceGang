@@ -1,14 +1,14 @@
-#pragma once
 
 #pragma once
 
-#include <SFML/Network.hpp>
+#include "network/TcpConnection.h"
+
 #include <cstdint>
 
 struct ClientSession
 {
-    std::uint32_t playerId;
-    sf::TcpSocket socket;
+    std::uint32_t playerId = 0;
+    TcpConnection connection;
 
     explicit ClientSession(std::uint32_t id)
         : playerId(id)

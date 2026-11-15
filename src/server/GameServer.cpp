@@ -3,6 +3,7 @@
 #include "protocol/MessageType.h"
 
 #include <iostream>
+#include <vector>
 
 bool GameServer::start()
 {
@@ -14,9 +15,7 @@ bool GameServer::start()
 
     running = true;
 
-    std::cout << "Servidor iniciado en puerto "
-        << PORT << "\n";
-
+    std::cout << "SpaceGang Server iniciado\n";
     return true;
 }
 
@@ -24,8 +23,8 @@ void GameServer::run()
 {
     while (running)
     {
-        if (!selector.wait(sf::milliseconds(100)))
-            continue;
+        // Esperamos brevemente por conexiones o datos.
+        selector.wait(sf::milliseconds(10));
 
         if (selector.isReady(listener))
             acceptClient();
@@ -36,112 +35,255 @@ void GameServer::run()
 
 void GameServer::acceptClient()
 {
-    clients.emplace_back(nextPlayerId);
-
+    clients.emplace_back(0);
     auto& session = clients.back();
 
-    if (listener.accept(session.socket)
-        != sf::Socket::Status::Done)
+    auto& socket = session.connection.getSocket();
+
+    if (listener.accept(socket) != sf::Socket::Status::Done)
     {
         clients.pop_back();
         return;
     }
 
-    if (clients.size() > MAX_PLAYERS)
+    // Una conexion nueva no recibe un espacio
+    // hasta comprobar que existe disponibilidad.
+    if (lobby.isFull())
     {
-        sf::Packet rejected;
-        rejected << static_cast<std::uint8_t>(
-            MessageType::ServerFull
-            );
+        session.connection.setConnected(true);
 
-        session.socket.send(rejected);
-        session.socket.disconnect();
+        Protocol::Message rejected = {
+            static_cast<std::uint8_t>(
+                MessageType::ServerFull
+            )
+        };
+
+        session.connection.queueMessage(rejected);
+        session.connection.flushSendQueue();
+        session.connection.disconnect();
+
+        clients.pop_back();
+
+        std::cout << "Lobby lleno\n";
+        return;
+    }
+
+    auto id = lobby.addPlayer("Jugador");
+
+    if (!id)
+    {
+        session.connection.disconnect();
         clients.pop_back();
         return;
     }
 
-    session.socket.setBlocking(true);
+    session.playerId = *id;
+    session.connection.setConnected(true);
 
-    sf::Packet accepted;
+    Protocol::Message accepted = {
+        static_cast<std::uint8_t>(
+            MessageType::JoinAccepted
+        ),
+        static_cast<std::uint8_t>(session.playerId)
+    };
 
-    accepted << static_cast<std::uint8_t>(
-        MessageType::JoinAccepted
-        );
+    session.connection.queueMessage(accepted);
 
-    accepted << nextPlayerId;
-
-    if (session.socket.send(accepted)
-        != sf::Socket::Status::Done)
+    if (!session.connection.flushSendQueue())
     {
-        session.socket.disconnect();
+        lobby.removePlayer(session.playerId);
         clients.pop_back();
         return;
     }
 
-    selector.add(session.socket);
+    selector.add(socket);
+
+    sendLobbyState(session);
+    broadcastPlayerJoined(session.playerId);
 
     std::cout << "Jugador "
-        << nextPlayerId
+        << session.playerId
         << " conectado\n";
-
-    broadcastPlayerJoined(nextPlayerId);
-
-    ++nextPlayerId;
-}
-
-void GameServer::broadcastPlayerJoined(
-    std::uint32_t playerId)
-{
-    sf::Packet packet;
-
-    packet << static_cast<std::uint8_t>(
-        MessageType::PlayerJoined
-        );
-
-    packet << playerId;
-
-    for (auto& client : clients)
-        client.socket.send(packet);
 }
 
 void GameServer::checkClients()
 {
     for (auto it = clients.begin(); it != clients.end();)
     {
-        if (!selector.isReady(it->socket))
+        auto& connection = it->connection;
+
+        if (selector.isReady(connection.getSocket()))
         {
-            ++it;
+            std::vector<Protocol::Message> messages;
+
+            if (!connection.receiveMessages(messages))
+            {
+                disconnectClient(it);
+                continue;
+            }
+
+
+            for (const auto& message : messages)
+            {
+                processMessage(*it, message);
+            }
+
+        }
+
+        if (!connection.flushSendQueue())
+        {
+            disconnectClient(it);
             continue;
         }
 
-        sf::Packet packet;
-        auto status = it->socket.receive(packet);
-
-        if (status == sf::Socket::Status::Disconnected ||
-            status == sf::Socket::Status::Error)
-        {
-            std::cout << "Jugador "
-                << it->playerId
-                << " desconectado\n";
-
-            selector.remove(it->socket);
-            it = clients.erase(it);
-        }
-        else
-        {
-            ++it;
-        }
+        ++it;
     }
+}
+
+void GameServer::disconnectClient(
+    std::list<ClientSession>::iterator& it)
+{
+    auto id = it->playerId;
+
+    selector.remove(it->connection.getSocket());
+    it->connection.disconnect();
+
+    lobby.removePlayer(id);
+
+    it = clients.erase(it);
+    broadcastPlayerLeft(id);
+    std::cout << "Jugador " << id
+        << " desconectado\n";
 }
 
 void GameServer::stop()
 {
     running = false;
+
     selector.clear();
 
     for (auto& client : clients)
-        client.socket.disconnect();
+        client.connection.disconnect();
 
     clients.clear();
     listener.close();
+}
+
+void GameServer::sendLobbyState(ClientSession& client)
+{
+    auto players = lobby.getPlayers();
+
+    Protocol::Message message;
+
+    message.push_back(
+        static_cast<std::uint8_t>(
+            MessageType::LobbyState
+            )
+    );
+
+    message.push_back(
+        static_cast<std::uint8_t>(players.size())
+    );
+
+    for (const auto& player : players)
+    {
+        message.push_back(
+            static_cast<std::uint8_t>(player.playerId)
+        );
+
+        message.push_back(player.zoneId);
+    }
+
+    client.connection.queueMessage(message);
+}
+
+void GameServer::broadcastPlayerJoined(
+    std::uint32_t playerId)
+{
+    Protocol::Message message = {
+        static_cast<std::uint8_t>(
+            MessageType::PlayerJoined
+        ),
+        static_cast<std::uint8_t>(playerId)
+    };
+
+    for (auto& client : clients)
+    {
+        if (client.playerId != playerId)
+            client.connection.queueMessage(message);
+    }
+}
+
+void GameServer::broadcastPlayerLeft(
+    std::uint32_t playerId)
+{
+    Protocol::Message message = {
+        static_cast<std::uint8_t>(
+            MessageType::PlayerLeft
+        ),
+        static_cast<std::uint8_t>(playerId)
+    };
+
+    for (auto& client : clients)
+        client.connection.queueMessage(message);
+}
+
+void GameServer::processMessage(
+    ClientSession& client,
+    const Protocol::Message& message)
+{
+    if (message.empty())
+        return;
+
+    auto type = static_cast<MessageType>(message[0]);
+
+    switch (type)
+    {
+    case MessageType::SelectZone:
+    {
+        if (message.size() != 2)
+            return;
+
+        std::uint8_t zoneId = message[1];
+
+        if (!lobby.setPlayerZone(
+            client.playerId, zoneId))
+        {
+            std::cout << "Zona invalida solicitada por "
+                << client.playerId << "\n";
+            return;
+        }
+
+        std::cout << "Jugador "
+            << client.playerId
+            << " cambio a zona "
+            << static_cast<int>(zoneId)
+            << "\n";
+
+        broadcastZoneChanged(
+            client.playerId, zoneId
+        );
+
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+
+void GameServer::broadcastZoneChanged(
+    std::uint32_t playerId,
+    std::uint8_t zoneId)
+{
+    Protocol::Message message = {
+        static_cast<std::uint8_t>(
+            MessageType::PlayerZoneChanged
+        ),
+        static_cast<std::uint8_t>(playerId),
+        zoneId
+    };
+
+    for (auto& client : clients)
+        client.connection.queueMessage(message);
 }

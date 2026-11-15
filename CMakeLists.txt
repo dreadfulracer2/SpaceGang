@@ -18,24 +18,40 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SFML)
 
 
-# CLIENTE
+
+# Biblioteca compartida de red
+add_library(SpaceGangShared STATIC
+    src/shared/protocol/Protocol.cpp
+    src/shared/network/TcpConnection.cpp
+)
+
+target_include_directories(SpaceGangShared PUBLIC
+    src/shared
+)
+
+target_link_libraries(SpaceGangShared PUBLIC
+    SFML::Network
+)
+
+# Cliente
+
 add_executable(SpaceGangClient
     src/client/main.cpp
     src/client/network/NetworkClient.cpp
+    src/client/lobby/ClientLobby.cpp
 )
 
 target_include_directories(SpaceGangClient PRIVATE
     src/client
-    src/shared
 )
 
 target_link_libraries(SpaceGangClient PRIVATE
+    SpaceGangShared
     SFML::Graphics
-    SFML::Network
 )
 
-# SERVIDOR
 
+# Servidor
 add_executable(SpaceGangServer
     src/server/main.cpp
     src/server/GameServer.cpp
@@ -44,10 +60,19 @@ add_executable(SpaceGangServer
 
 target_include_directories(SpaceGangServer PRIVATE
     src/server
-    src/shared
 )
 
 target_link_libraries(SpaceGangServer PRIVATE
-    SFML::Network
+    SpaceGangShared
 )
+
+# Prueba del protocolo
+add_executable(ProtocolTest
+    tests/ProtocolTest.cpp
+)
+
+target_link_libraries(ProtocolTest PRIVATE
+    SpaceGangShared
+)
+
 

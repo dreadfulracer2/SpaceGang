@@ -9,5 +9,9 @@ enum class MessageType : std::uint8_t
     PlayerJoined,
     PlayerLeft,
     ServerFull,
-    ChatMessage
+    ChatMessage,
+
+    LobbyState,
+    SelectZone,
+    PlayerZoneChanged
 };
