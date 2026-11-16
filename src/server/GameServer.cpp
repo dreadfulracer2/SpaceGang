@@ -153,6 +153,10 @@ void GameServer::disconnectClient(
     std::list<ClientSession>::iterator& it)
 {
     std::uint32_t id = it->playerId;
+    const std::uint32_t disconnectedPlayerId =
+        it->playerId;
+
+    rocketVoting.removeVote(disconnectedPlayerId);
 
     selector.remove(it->connection.getSocket());
 
@@ -169,6 +173,24 @@ void GameServer::disconnectClient(
     std::cout << "Jugador "
         << id
         << " desconectado\n";
+
+    if (votingState == RocketVotingState::Voting)
+    {
+        broadcastRocketVotingProgress();
+
+        std::vector<std::uint32_t> playerIds;
+
+        for (const auto& player : lobby.getPlayers())
+        {
+            playerIds.push_back(player.playerId);
+        }
+
+        if (rocketVoting.allPlayersVoted(playerIds))
+        {
+            broadcastRocketVotingFinished();
+        }
+    }
+
 }
 
 void GameServer::sendLobbyState(
@@ -340,13 +362,91 @@ void GameServer::processMessage(
 
         // Todas las condiciones se cumplieron.
         gameState = GameState::Playing;
-
+        rocketVoting.reset();
+        votingState = RocketVotingState::Voting;
         std::cout
-            << "Partida iniciada por jugador "
+            << "Partida iniciada por Player "
             << client.playerId
             << "\n";
 
         broadcastGameStarted();
+
+        break;
+    }
+
+    case MessageType::SubmitRocketVote:
+    {
+        // Tipo de mensaje + 3 selecciones.
+        if (message.size() != 4)
+            break;
+
+        // Solo aceptar votos durante la partida.
+
+        if (gameState != GameState::Playing ||
+            votingState != RocketVotingState::Voting)
+        {
+            Protocol::Message response = {
+                static_cast<std::uint8_t>(
+                    MessageType::RocketVoteRejected
+                )
+            };
+
+            client.connection.queueMessage(response);
+            break;
+        }
+
+
+        std::array<std::uint8_t, 3> selections = {
+            message[1],
+            message[2],
+            message[3]
+        };
+
+        bool accepted = rocketVoting.submitVote(
+            client.playerId,
+            selections
+        );
+
+        if (!accepted)
+        {
+            Protocol::Message response = {
+                static_cast<std::uint8_t>(
+                    MessageType::RocketVoteRejected
+                )
+            };
+
+            client.connection.queueMessage(response);
+            break;
+        }
+
+        // Confirmar al jugador que su voto fue recibido.
+        Protocol::Message response = {
+            static_cast<std::uint8_t>(
+                MessageType::RocketVoteAccepted
+            )
+        };
+
+        client.connection.queueMessage(response);
+
+        std::cout
+            << "Votos recibidos del jugador "
+            << client.playerId << "\n";
+
+        broadcastRocketVotingProgress();
+
+        // Obtener los identificadores de Connected players.
+        std::vector<std::uint32_t> playerIds;
+
+        for (const auto& player : lobby.getPlayers())
+        {
+            playerIds.push_back(player.playerId);
+        }
+
+        // Finalizar solamente cuando todos hayan votado.
+        if (rocketVoting.allPlayersVoted(playerIds))
+        {
+            broadcastRocketVotingFinished();
+        }
 
         break;
     }
@@ -406,5 +506,114 @@ void GameServer::sendStartGameRejected(
         << "Solicitud de inicio rechazada "
         << "para jugador "
         << client.playerId
+        << "\n";
+}
+
+void GameServer::broadcastRocketVotingProgress()
+{
+    const auto players = lobby.getPlayers();
+
+    Protocol::Message message = {
+        static_cast<std::uint8_t>(
+            MessageType::RocketVotingProgress
+        ),
+        static_cast<std::uint8_t>(
+            rocketVoting.getVoteCount()
+        ),
+        static_cast<std::uint8_t>(
+            players.size()
+        )
+    };
+
+    for (auto& client : clients)
+    {
+        client.connection.queueMessage(message);
+    }
+}
+
+
+void GameServer::broadcastRocketVotingFinished()
+{
+    if (votingState != RocketVotingState::Voting)
+        return;
+
+    // Bloquear nuevos votos antes de calcular.
+    votingState = RocketVotingState::Finished;
+
+    const auto winners = rocketVoting.calculateWinners();
+
+    const LaunchReport report =
+        launchSimulator.simulate(winners);
+
+    std::cout << "\n=== RESULTADO DEL LANZAMIENTO ===\n";
+
+    std::cout
+        << "Costo: " << report.totalPrice
+        << " millones\n";
+
+    std::cout
+        << "Masa: " << report.totalMass
+        << " kg\n";
+
+    std::cout
+        << "Capacidad de tripulantes: "
+        << report.crewCapacity << "\n";
+
+    std::cout
+        << "Relacion Thrust/peso: "
+        << report.thrustToWeight << "\n";
+
+    switch (report.result)
+    {
+    case LaunchResult::NoCrew:
+        std::cout << "FALLO: no hay tripulantes.\n";
+        break;
+
+    case LaunchResult::OverBudget:
+        std::cout << "FALLO: Budget Exceeded.\n";
+        break;
+
+    case LaunchResult::InsufficientThrust:
+        std::cout << "FALLO: Insufficient Thrust.\n";
+        break;
+
+    case LaunchResult::InsufficientSecondStage:
+        std::cout << "FALLO: segunda etapa insuficiente.\n";
+        break;
+
+    case LaunchResult::Success:
+        std::cout << "Mission Accomplished.\n";
+        break;
+    }
+
+    Protocol::Message message = {
+        static_cast<std::uint8_t>(
+            MessageType::RocketVotingFinished
+        ),
+        winners[0],
+        winners[1],
+        winners[2]
+    };
+
+    for (auto& client : clients)
+    {
+        client.connection.queueMessage(message);
+    }
+
+    std::cout << "\nVOTACION FINALIZADA\n";
+
+    std::cout
+        << "Cabina ganadora: "
+        << static_cast<int>(winners[0])
+        << "\n";
+
+    std::cout
+        << "Propulsor 1 ganador: "
+        << static_cast<int>(winners[1])
+        << "\n";
+
+    std::cout
+        << "SECOND STAGE ganador: "
+        << static_cast<int>(winners[2])
         << "\n";
 }

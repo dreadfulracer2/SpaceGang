@@ -31,4 +31,5 @@ public:
     std::size_t getVoteCount() const;
 
     std::array<std::uint8_t, 3> calculateWinners() const;
+    bool removeVote(std::uint32_t playerId);
 };

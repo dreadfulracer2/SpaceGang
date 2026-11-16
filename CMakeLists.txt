@@ -42,6 +42,7 @@ add_executable(SpaceGangClient
     src/client/ui/Button.cpp
     src/client/network/NetworkClient.cpp
     src/client/lobby/ClientLobby.cpp
+    src/client/ui/RocketVotingScreen.cpp
 )
 
 target_include_directories(SpaceGangClient PRIVATE
@@ -60,6 +61,8 @@ add_executable(SpaceGangServer
     src/server/main.cpp
     src/server/GameServer.cpp
     src/server/lobby/LobbyManager.cpp
+    src/server/voting/RocketVotingManager.cpp
+    src/server/simulation/RocketLaunchSimulator.cpp
 )
 
 target_include_directories(SpaceGangServer PRIVATE

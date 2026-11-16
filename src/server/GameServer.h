@@ -9,6 +9,14 @@
 #include "network/ClientSession.h"
 #include "lobby/LobbyManager.h"
 #include "game/GameState.h"
+#include "voting/RocketVotingManager.h"
+#include "simulation/RocketLaunchSimulator.h"
+enum class RocketVotingState
+{
+    Inactive,
+    Voting,
+    Finished
+};
 
 class GameServer
 {
@@ -26,6 +34,7 @@ private:
 
     // Estado actual de la partida.
     GameState gameState = GameState::Lobby;
+    RocketLaunchSimulator launchSimulator;
 
 public:
     bool start();
@@ -63,4 +72,9 @@ private:
     void sendStartGameRejected(
         ClientSession& client
     );
+    RocketVotingManager rocketVoting;
+    void broadcastRocketVotingProgress();
+    void broadcastRocketVotingFinished();
+    RocketVotingState votingState =
+        RocketVotingState::Inactive;
 };

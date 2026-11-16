@@ -189,6 +189,15 @@ void NetworkClient::processMessage(
 
         gameState = GameState::Playing;
 
+        rocketVotePending = false;
+        rocketVoteConfirmed = false;
+        rocketVotingFinished = false;
+
+        rocketVotesReceived = 0;
+        rocketTotalPlayers = 0;
+
+        rocketWinners = { 0, 0, 0 };
+
         std::cout << "La partida ha comenzado\n";
 
         break;
@@ -206,6 +215,67 @@ void NetworkClient::processMessage(
 
         break;
     }
+
+
+    case MessageType::RocketVoteAccepted:
+    {
+        if (message.size() != 1)
+            break;
+
+        rocketVotePending = false;
+        rocketVoteConfirmed = true;
+
+        std::cout << "Votos confirmados.\n";
+        break;
+    }
+
+    case MessageType::RocketVoteRejected:
+    {
+        if (message.size() != 1)
+            break;
+
+        rocketVotePending = false;
+
+        std::cout << "El servidor rechazo los votos.\n";
+        break;
+    }
+
+    case MessageType::RocketVotingProgress:
+    {
+        if (message.size() != 3)
+            break;
+
+        rocketVotesReceived = message[1];
+        rocketTotalPlayers = message[2];
+
+        std::cout
+            << "Progreso: "
+            << static_cast<int>(rocketVotesReceived)
+            << " / "
+            << static_cast<int>(rocketTotalPlayers)
+            << "\n";
+
+        break;
+    }
+
+    case MessageType::RocketVotingFinished:
+    {
+        if (message.size() != 4)
+            break;
+
+        rocketVotePending = false;
+        rocketVotingFinished = true;
+
+        rocketWinners = {
+            message[1],
+            message[2],
+            message[3]
+        };
+
+        std::cout << "VOTING COMPLETE.\n";
+        break;
+    }
+
 
     default:
         break;
@@ -240,6 +310,16 @@ void NetworkClient::disconnect()
     playerId = 0;
     gameState = GameState::Lobby;
     startGameRejected = false;
+
+    rocketVotePending = false;
+    rocketVoteConfirmed = false;
+    rocketVotingFinished = false;
+
+    rocketVotesReceived = 0;
+    rocketTotalPlayers = 0;
+
+    rocketWinners = { 0, 0, 0 };
+
 }
 
 std::uint32_t NetworkClient::getPlayerId() const
@@ -279,4 +359,81 @@ bool NetworkClient::consumeStartGameRejected()
     bool rejected = startGameRejected;
     startGameRejected = false;
     return rejected;
+}
+
+
+bool NetworkClient::submitRocketVote(
+    std::uint8_t crewModule,
+    std::uint8_t booster1,
+    std::uint8_t booster2)
+{
+    if (!connection.isConnected())
+        return false;
+
+    if (gameState != GameState::Playing)
+        return false;
+
+    if (rocketVoteConfirmed ||
+        rocketVotePending ||
+        rocketVotingFinished)
+    {
+        return false;
+    }
+
+    if (crewModule > 2 ||
+        booster1 > 2 ||
+        booster2 > 2)
+    {
+        return false;
+    }
+
+    Protocol::Message message = {
+        static_cast<std::uint8_t>(
+            MessageType::SubmitRocketVote
+        ),
+        crewModule,
+        booster1,
+        booster2
+    };
+
+    if (!connection.queueMessage(message))
+        return false;
+
+    // Bloquear envios duplicados mientras
+    // esperamos la respuesta del servidor.
+    rocketVotePending = true;
+
+    return true;
+}
+
+
+bool NetworkClient::hasConfirmedRocketVote() const
+{
+    return rocketVoteConfirmed;
+}
+
+bool NetworkClient::isRocketVotePending() const
+{
+    return rocketVotePending;
+}
+
+bool NetworkClient::isRocketVotingFinished() const
+{
+    return rocketVotingFinished;
+}
+
+std::uint8_t NetworkClient::getRocketVotesReceived() const
+{
+    return rocketVotesReceived;
+}
+
+std::uint8_t NetworkClient::getRocketTotalPlayers() const
+{
+    return rocketTotalPlayers;
+}
+
+const std::array<std::uint8_t, 3>&
+NetworkClient::getRocketWinners() const
+{
+    return rocketWinners;
 }

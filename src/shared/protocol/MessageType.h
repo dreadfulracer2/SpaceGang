@@ -16,5 +16,10 @@ enum class MessageType : std::uint8_t
 
     StartGameRequest,
     GameStarted,
-    StartGameRejected
+    StartGameRejected,
+    SubmitRocketVote,
+    RocketVoteAccepted,
+    RocketVoteRejected,
+    RocketVotingProgress,
+    RocketVotingFinished
 };

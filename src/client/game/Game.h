@@ -5,10 +5,11 @@
 
 #include "network/NetworkClient.h"
 #include "ui/Button.h"
-
+#include <memory>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include "ui/RocketVotingScreen.h"
 
 class Game
 {
@@ -23,6 +24,7 @@ private:
     std::unique_ptr<Button> zoneCButton;
 
     bool running = true;
+    std::unique_ptr<RocketVotingScreen> rocketVotingScreen;
 
 public:
     Game();

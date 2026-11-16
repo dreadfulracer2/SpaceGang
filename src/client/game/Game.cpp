@@ -24,7 +24,7 @@ Game::Game()
 
     zoneAButton = std::make_unique<Button>(
         font,
-        "ZONA A",
+        "Mission Control",
         sf::Vector2f(80.f, 590.f),
         sf::Vector2f(340.f, 65.f),
         sf::Color(37, 99, 235)
@@ -40,7 +40,7 @@ Game::Game()
 
     zoneCButton = std::make_unique<Button>(
         font,
-        "ZONA C",
+        "Space Station",
         sf::Vector2f(860.f, 590.f),
         sf::Vector2f(340.f, 65.f),
         sf::Color(217, 119, 6)
@@ -48,12 +48,13 @@ Game::Game()
 
     startGameButton = std::make_unique<Button>(
         font,
-        "INICIAR PARTIDA",
+        "START GAME",
         sf::Vector2f(450.f, 665.f),
         sf::Vector2f(380.f, 45.f),
         sf::Color(120, 65, 200)
     );
-
+    rocketVotingScreen =
+        std::make_unique<RocketVotingScreen>(font);
 }
 
 
@@ -159,6 +160,19 @@ void Game::processEvents()
 
 void Game::handleMouseClick(sf::Vector2f position)
 {
+
+    if (network.getGameState() == GameState::Playing)
+    {
+        if (!network.isRocketVotingFinished())
+        {
+            rocketVotingScreen->handleClick(
+                position,
+                network
+            );
+        }
+
+        return;
+    }
 
     if (network.getGameState() != GameState::Lobby)
         return;
@@ -382,7 +396,7 @@ void Game::drawPlayerCard(
         break;
 
     case 2:
-        zoneText = "ZONA B";
+        zoneText = "Spacecraft";
         zoneColor = sf::Color(74, 222, 128);
         break;
 
@@ -433,11 +447,13 @@ void Game::drawPlayerCard(
 
 void Game::render()
 {
+
     if (network.getGameState() == GameState::Playing)
     {
-        renderPlaying();
+        rocketVotingScreen->render(window, network);
         return;
     }
+
     window.clear(sf::Color(21, 27, 41));
 
     drawText(
@@ -518,7 +534,7 @@ void Game::renderPlaying()
     );
 
     drawText(
-        "PARTIDA INICIADA",
+        "GAME STARTED",
         435,
         290,
         32,

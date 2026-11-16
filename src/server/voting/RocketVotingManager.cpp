@@ -114,3 +114,9 @@ RocketVotingManager::calculateWinners() const
 
     return winners;
 }
+
+bool RocketVotingManager::removeVote(
+    std::uint32_t playerId)
+{
+    return votes.erase(playerId) > 0;
+}
