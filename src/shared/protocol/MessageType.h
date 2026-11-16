@@ -10,8 +10,11 @@ enum class MessageType : std::uint8_t
     PlayerLeft,
     ServerFull,
     ChatMessage,
-
     LobbyState,
     SelectZone,
-    PlayerZoneChanged
+    PlayerZoneChanged,
+
+    StartGameRequest,
+    GameStarted,
+    StartGameRejected
 };

@@ -8,6 +8,7 @@
 
 #include "network/ClientSession.h"
 #include "lobby/LobbyManager.h"
+#include "game/GameState.h"
 
 class GameServer
 {
@@ -18,9 +19,13 @@ private:
     sf::SocketSelector selector;
 
     std::list<ClientSession> clients;
+
     LobbyManager lobby;
 
     bool running = false;
+
+    // Estado actual de la partida.
+    GameState gameState = GameState::Lobby;
 
 public:
     bool start();
@@ -45,14 +50,17 @@ private:
         std::uint32_t playerId
     );
 
+    void broadcastAllZones();
+
     void processMessage(
         ClientSession& client,
         const Protocol::Message& message
     );
 
-    void broadcastZoneChanged(
-        std::uint32_t playerId,
-        std::uint8_t zoneId
-    );
+    // Nuevas funciones de la etapa 6.4.
+    void broadcastGameStarted();
 
+    void sendStartGameRejected(
+        ClientSession& client
+    );
 };

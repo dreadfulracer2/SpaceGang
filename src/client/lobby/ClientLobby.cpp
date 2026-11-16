@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <string>
 
 void ClientLobby::clear()
 {
@@ -15,7 +16,8 @@ void ClientLobby::setPlayers(
     players = newPlayers;
 }
 
-void ClientLobby::addPlayer(std::uint32_t playerId)
+void ClientLobby::addPlayer(
+    std::uint32_t playerId)
 {
     for (const auto& player : players)
     {
@@ -24,15 +26,23 @@ void ClientLobby::addPlayer(std::uint32_t playerId)
     }
 
     PlayerInfo player;
+
     player.playerId = playerId;
-    player.name = "Jugador " + std::to_string(playerId);
+
+    player.name =
+        "Jugador " + std::to_string(playerId);
+
     player.zoneId = 0;
+    player.secondaryZoneId = 0;
+    player.thirdZoneId = 0;
+
     player.isHost = (playerId == 1);
 
     players.push_back(player);
 }
 
-void ClientLobby::removePlayer(std::uint32_t playerId)
+void ClientLobby::removePlayer(
+    std::uint32_t playerId)
 {
     players.erase(
         std::remove_if(
@@ -49,13 +59,18 @@ void ClientLobby::removePlayer(std::uint32_t playerId)
 
 void ClientLobby::updateZone(
     std::uint32_t playerId,
-    std::uint8_t zoneId)
+    std::uint8_t zoneId,
+    std::uint8_t secondaryZoneId,
+    std::uint8_t thirdZoneId)
 {
     for (auto& player : players)
     {
         if (player.playerId == playerId)
         {
             player.zoneId = zoneId;
+            player.secondaryZoneId = secondaryZoneId;
+            player.thirdZoneId = thirdZoneId;
+
             return;
         }
     }
@@ -75,8 +90,26 @@ void ClientLobby::printPlayers() const
     {
         std::cout
             << "Jugador " << player.playerId
-            << " | Zona "
+            << " | Principal: "
             << static_cast<int>(player.zoneId);
+
+        if (player.secondaryZoneId != 0)
+        {
+            std::cout
+                << " | Secundaria: "
+                << static_cast<int>(
+                    player.secondaryZoneId
+                    );
+        }
+
+        if (player.thirdZoneId != 0)
+        {
+            std::cout
+                << " | Tercera: "
+                << static_cast<int>(
+                    player.thirdZoneId
+                    );
+        }
 
         if (player.isHost)
             std::cout << " | HOST";

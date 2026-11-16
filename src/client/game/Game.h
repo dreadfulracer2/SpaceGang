@@ -2,8 +2,12 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
-#include "network/NetworkClient.h"
 
+#include "network/NetworkClient.h"
+#include "ui/Button.h"
+
+#include <cstdint>
+#include <memory>
 #include <string>
 
 class Game
@@ -11,6 +15,12 @@ class Game
 private:
     sf::RenderWindow window;
     NetworkClient network;
+
+    sf::Font font;
+
+    std::unique_ptr<Button> zoneAButton;
+    std::unique_ptr<Button> zoneBButton;
+    std::unique_ptr<Button> zoneCButton;
 
     bool running = true;
 
@@ -25,4 +35,27 @@ private:
     void processEvents();
     void update();
     void render();
+
+    void updateZoneButtons();
+
+    void handleMouseClick(sf::Vector2f position);
+
+    void drawText(
+        const std::string& text,
+        float x,
+        float y,
+        unsigned int size,
+        sf::Color color
+    );
+
+    void drawPlayerCard(
+        std::uint32_t playerId,
+        float x,
+        float y
+    );
+
+    void selectZone(std::uint8_t zoneId);
+    std::unique_ptr<Button> startGameButton;
+    bool isLocalPlayerHost() const;
+    void renderPlaying();
 };

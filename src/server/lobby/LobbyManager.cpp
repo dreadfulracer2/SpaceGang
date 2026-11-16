@@ -15,9 +15,13 @@ LobbyManager::addPlayer(const std::string& name)
 
             player.name = name;
             player.zoneId = 0;
+            player.secondaryZoneId = 0;
+            player.thirdZoneId = 0;
             player.isHost = (i == 0);
 
             players[i] = player;
+
+            updateHostSecondaryZone();
 
             return player.playerId;
         }
@@ -26,7 +30,8 @@ LobbyManager::addPlayer(const std::string& name)
     return std::nullopt;
 }
 
-bool LobbyManager::removePlayer(std::uint32_t playerId)
+bool LobbyManager::removePlayer(
+    std::uint32_t playerId)
 {
     if (playerId < 1 || playerId > MAX_PLAYERS)
         return false;
@@ -38,30 +43,121 @@ bool LobbyManager::removePlayer(std::uint32_t playerId)
 
     slot.reset();
 
+    updateHostSecondaryZone();
+
     return true;
+}
+
+bool LobbyManager::canSelectZone(
+    std::uint32_t playerId,
+    std::uint8_t zoneId) const
+{
+    if (zoneId < 1 || zoneId > 3)
+        return false;
+
+    if (playerId < 1 || playerId > MAX_PLAYERS)
+        return false;
+
+    if (!players[playerId - 1].has_value())
+        return false;
+
+    const int capacities[4] = { 0, 1, 2, 1 };
+
+    int occupied = 0;
+
+    for (const auto& slot : players)
+    {
+        if (!slot.has_value())
+            continue;
+
+        // No contar al jugador que solicita el cambio.
+        if (slot->playerId == playerId)
+            continue;
+
+        if (slot->zoneId == zoneId)
+            ++occupied;
+    }
+
+    return occupied < capacities[zoneId];
 }
 
 bool LobbyManager::setPlayerZone(
     std::uint32_t playerId,
     std::uint8_t zoneId)
 {
-    if (playerId < 1 || playerId > MAX_PLAYERS)
+    if (!canSelectZone(playerId, zoneId))
         return false;
 
-    if (zoneId < 1 || zoneId > 3)
-        return false;
+    auto& player = players[playerId - 1];
 
-    auto& slot = players[playerId - 1];
+    player->zoneId = zoneId;
 
-    if (!slot.has_value())
-        return false;
-
-    slot->zoneId = zoneId;
+    updateHostSecondaryZone();
 
     return true;
 }
 
-std::vector<PlayerInfo> LobbyManager::getPlayers() const
+void LobbyManager::updateHostSecondaryZone()
+{
+    PlayerInfo* host = nullptr;
+
+    for (auto& slot : players)
+    {
+        if (slot.has_value() && slot->isHost)
+        {
+            host = &slot.value();
+            break;
+        }
+    }
+
+    if (!host)
+        return;
+
+    host->secondaryZoneId = 0;
+    host->thirdZoneId = 0;
+
+    // El Host primero debe elegir su zona principal.
+    if (host->zoneId == 0)
+        return;
+
+    std::uint8_t freeZones[2] = { 0, 0 };
+    int freeCount = 0;
+
+    for (std::uint8_t zone = 1; zone <= 3; ++zone)
+    {
+        if (zone == host->zoneId)
+            continue;
+
+        bool occupied = false;
+
+        for (const auto& slot : players)
+        {
+            if (!slot.has_value())
+                continue;
+
+            if (slot->zoneId == zone)
+            {
+                occupied = true;
+                break;
+            }
+        }
+
+        if (!occupied && freeCount < 2)
+        {
+            freeZones[freeCount] = zone;
+            ++freeCount;
+        }
+    }
+
+    if (freeCount >= 1)
+        host->secondaryZoneId = freeZones[0];
+
+    if (freeCount >= 2)
+        host->thirdZoneId = freeZones[1];
+}
+
+std::vector<PlayerInfo>
+LobbyManager::getPlayers() const
 {
     std::vector<PlayerInfo> result;
 
@@ -90,4 +186,56 @@ std::size_t LobbyManager::getPlayerCount() const
     }
 
     return count;
+}
+
+bool LobbyManager::areAllZonesCovered() const
+{
+    bool covered[4] = { false, false, false, false };
+
+    for (const auto& player : getPlayers())
+    {
+        if (player.zoneId >= 1 && player.zoneId <= 3)
+            covered[player.zoneId] = true;
+
+        if (player.secondaryZoneId >= 1 &&
+            player.secondaryZoneId <= 3)
+        {
+            covered[player.secondaryZoneId] = true;
+        }
+
+        if (player.thirdZoneId >= 1 &&
+            player.thirdZoneId <= 3)
+        {
+            covered[player.thirdZoneId] = true;
+        }
+    }
+
+    return covered[1] && covered[2] && covered[3];
+}
+
+bool LobbyManager::isHost(std::uint32_t playerId) const
+{
+    if (playerId < 1 || playerId > MAX_PLAYERS)
+        return false;
+
+    const auto& slot = players[playerId - 1];
+
+    return slot.has_value() && slot->isHost;
+}
+
+bool LobbyManager::haveAllPlayersSelectedZone() const
+{
+    // Comprobar que todos los jugadores conectados
+    // hayan seleccionado una zona principal.
+
+    for (const auto& slot : players)
+    {
+        if (!slot.has_value())
+            continue;
+
+        if (slot->zoneId == 0)
+            return false;
+    }
+
+    return true;
 }

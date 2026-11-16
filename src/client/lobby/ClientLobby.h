@@ -24,7 +24,9 @@ public:
 
     void updateZone(
         std::uint32_t playerId,
-        std::uint8_t zoneId
+        std::uint8_t zoneId,
+        std::uint8_t secondaryZoneId,
+        std::uint8_t thirdZoneId
     );
 
     const std::vector<PlayerInfo>& getPlayers() const;

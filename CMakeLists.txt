@@ -26,7 +26,7 @@ add_library(SpaceGangShared STATIC
 )
 
 target_include_directories(SpaceGangShared PUBLIC
-    src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/shared
 )
 
 target_link_libraries(SpaceGangShared PUBLIC
@@ -35,9 +35,11 @@ target_link_libraries(SpaceGangShared PUBLIC
 
 # Cliente
 
+
 add_executable(SpaceGangClient
     src/client/main.cpp
     src/client/game/Game.cpp
+    src/client/ui/Button.cpp
     src/client/network/NetworkClient.cpp
     src/client/lobby/ClientLobby.cpp
 )
@@ -50,6 +52,7 @@ target_link_libraries(SpaceGangClient PRIVATE
     SpaceGangShared
     SFML::Graphics
 )
+
 
 
 # Servidor
@@ -76,4 +79,14 @@ target_link_libraries(ProtocolTest PRIVATE
     SpaceGangShared
 )
 
+
+add_custom_command(
+    TARGET SpaceGangClient POST_BUILD
+
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:SpaceGangClient>/assets"
+
+    COMMENT "Copiando recursos de SpaceGang"
+)
 
