@@ -31,163 +31,109 @@ bool NetworkClient::connectToServer(const std::string& ip)
     return true;
 }
 
-void NetworkClient::receiveMessages()
+void NetworkClient::processMessage(
+    const Protocol::Message& message)
 {
-    while (connection.isConnected())
+    if (message.empty())
+        return;
+
+    auto type = static_cast<MessageType>(message[0]);
+
+    switch (type)
     {
-
-        if (!connection.flushSendQueue())
-        {
-            std::cout << "Error al enviar datos\n";
+    case MessageType::JoinAccepted:
+    {
+        if (message.size() != 2)
             break;
-        }
 
-        std::vector<Protocol::Message> messages;
+        playerId = message[1];
 
-        if (!connection.receiveMessages(messages))
-        {
-            std::cout << "Conexion finalizada\n";
+        std::cout << "Tu ID es: "
+            << playerId << "\n";
+
+        // Eliminamos la seleccion automatica
+        // de zona que usamos en la etapa anterior.
+        break;
+    }
+
+    case MessageType::LobbyState:
+    {
+        if (message.size() < 2)
             break;
-        }
 
-        for (const auto& message : messages)
+        const std::uint8_t count = message[1];
+
+        if (count > 4 ||
+            message.size() != 2 + count * 2)
+            break;
+
+        std::vector<PlayerInfo> players;
+
+        for (std::size_t i = 0; i < count; ++i)
         {
-            if (message.empty())
-                continue;
+            const std::size_t offset = 2 + i * 2;
 
-            auto type = static_cast<MessageType>(
-                message[0]
-                );
+            PlayerInfo player;
+            player.playerId = message[offset];
+            player.zoneId = message[offset + 1];
+            player.name = "Jugador " +
+                std::to_string(player.playerId);
+            player.isHost = (player.playerId == 1);
 
-            switch (type)
-            {
-            case MessageType::JoinAccepted:
-            {
-                if (message.size() != 2)
-                    break;
-
-                playerId = message[1];
-
-                std::cout << "Tu ID es: "
-                    << playerId << "\n";
-
-                std::uint8_t zoneId =
-                    static_cast<std::uint8_t>(
-                        ((playerId - 1) % 3) + 1
-                        );
-
-                selectZone(zoneId);
-
-                break;
-            }
-
-            case MessageType::LobbyState:
-            {
-                if (message.size() < 2)
-                    break;
-
-                std::uint8_t count = message[1];
-
-                if (count > 4 ||
-                    message.size() != 2 + count * 2)
-                {
-                    break;
-                }
-
-                std::vector<PlayerInfo> players;
-
-                for (std::size_t i = 0; i < count; ++i)
-                {
-                    std::size_t offset = 2 + i * 2;
-
-                    PlayerInfo player;
-                    player.playerId = message[offset];
-                    player.zoneId = message[offset + 1];
-
-                    player.name =
-                        "Jugador " +
-                        std::to_string(player.playerId);
-
-                    player.isHost = (player.playerId == 1);
-
-                    players.push_back(player);
-                }
-
-                lobby.setPlayers(players);
-                lobby.printPlayers();
-
-                break;
-            }
-
-            case MessageType::PlayerJoined:
-            {
-                if (message.size() != 2)
-                    break;
-
-                auto id = message[1];
-
-                lobby.addPlayer(id);
-
-                std::cout << "Jugador "
-                    << static_cast<int>(id)
-                    << " entro al lobby\n";
-
-                lobby.printPlayers();
-
-                break;
-            }
-
-            case MessageType::PlayerLeft:
-            {
-                if (message.size() != 2)
-                    break;
-
-                auto id = message[1];
-
-                lobby.removePlayer(id);
-
-                std::cout << "Jugador "
-                    << static_cast<int>(id)
-                    << " salio del lobby\n";
-
-                lobby.printPlayers();
-
-                break;
-            }
-
-            case MessageType::ServerFull:
-            {
-                std::cout << "Servidor lleno\n";
-                disconnect();
-                return;
-            }
-
-            case MessageType::PlayerZoneChanged:
-            {
-                if (message.size() != 3)
-                    break;
-
-                std::uint32_t id = message[1];
-                std::uint8_t zoneId = message[2];
-
-                lobby.updateZone(id, zoneId);
-
-                std::cout << "Jugador " << id
-                    << " cambio a Zona "
-                    << static_cast<int>(zoneId)
-                    << "\n";
-
-                lobby.printPlayers();
-
-                break;
-            }
-
-            default:
-                break;
-            }
+            players.push_back(player);
         }
 
-        sf::sleep(sf::milliseconds(10));
+        lobby.setPlayers(players);
+        lobby.printPlayers();
+        break;
+    }
+
+    case MessageType::PlayerJoined:
+    {
+        if (message.size() != 2)
+            break;
+
+        lobby.addPlayer(message[1]);
+        lobby.printPlayers();
+        break;
+    }
+
+    case MessageType::PlayerLeft:
+    {
+        if (message.size() != 2)
+            break;
+
+        lobby.removePlayer(message[1]);
+        lobby.printPlayers();
+        break;
+    }
+
+    case MessageType::PlayerZoneChanged:
+    {
+        if (message.size() != 3)
+            break;
+
+        lobby.updateZone(message[1], message[2]);
+
+        std::cout << "Jugador "
+            << static_cast<int>(message[1])
+            << " cambio a zona "
+            << static_cast<int>(message[2])
+            << "\n";
+
+        lobby.printPlayers();
+        break;
+    }
+
+    case MessageType::ServerFull:
+    {
+        std::cout << "Servidor lleno\n";
+        disconnect();
+        break;
+    }
+
+    default:
+        break;
     }
 }
 
@@ -224,4 +170,36 @@ bool NetworkClient::selectZone(std::uint8_t zoneId)
     };
 
     return connection.queueMessage(message);
+}
+
+bool NetworkClient::update()
+{
+    if (!connection.isConnected())
+        return false;
+
+    if (!connection.flushSendQueue())
+    {
+        std::cout << "Error al enviar datos\n";
+        disconnect();
+        return false;
+    }
+
+    std::vector<Protocol::Message> messages;
+
+    if (!connection.receiveMessages(messages))
+    {
+        std::cout << "Conexion finalizada\n";
+        disconnect();
+        return false;
+    }
+
+    for (const auto& message : messages)
+    {
+        processMessage(message);
+
+        if (!connection.isConnected())
+            return false;
+    }
+
+    return true;
 }

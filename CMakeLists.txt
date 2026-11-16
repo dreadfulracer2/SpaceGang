@@ -37,6 +37,7 @@ target_link_libraries(SpaceGangShared PUBLIC
 
 add_executable(SpaceGangClient
     src/client/main.cpp
+    src/client/game/Game.cpp
     src/client/network/NetworkClient.cpp
     src/client/lobby/ClientLobby.cpp
 )

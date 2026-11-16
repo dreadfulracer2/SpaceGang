@@ -1,23 +1,22 @@
 
-#include "network/NetworkClient.h"
+#include "game/Game.h"
+
 #include <iostream>
+#include <string>
 
 int main()
 {
-    NetworkClient client;
-
     std::string ip;
 
     std::cout << "IP del servidor: ";
     std::cin >> ip;
 
-    if (!client.connectToServer(ip))
-    {
-        std::cout << "No se pudo conectar\n";
-        return 1;
-    }
+    Game game;
 
-    client.receiveMessages();
+    if (!game.connectToServer(ip))
+        return 1;
+
+    game.run();
 
     return 0;
 }

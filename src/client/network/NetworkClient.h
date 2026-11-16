@@ -12,7 +12,7 @@ class NetworkClient
 private:
     TcpConnection connection;
     ClientLobby lobby;
-
+    void processMessage(const Protocol::Message& message);
     std::uint32_t playerId = 0;
 
 public:
@@ -20,7 +20,7 @@ public:
     bool selectZone(std::uint8_t zoneId);
     void receiveMessages();
     void disconnect();
-
+    bool update();
     std::uint32_t getPlayerId() const;
 
     const ClientLobby& getLobby() const;
